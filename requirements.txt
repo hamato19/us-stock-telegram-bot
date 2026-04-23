@@ -1,3 +1,4 @@
 aiogram==2.25.1
-alpaca-trade-api
-aiohttp
+alpaca-trade-api==3.1.1
+aiohttp==3.8.6
+pydantic<2.0.0
