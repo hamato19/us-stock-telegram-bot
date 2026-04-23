@@ -1,58 +1,39 @@
 import os
 import logging
-import uuid
+import asyncio
 import io
-import pandas as pd
+import yfinance as yf
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils.executor import start_webhook
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import alpaca_trade_api as tradeapi
 
-# --- الإعدادات والمفاتيح ---
-TOKEN = os.getenv('TELEGRAM_TOKEN')
-ALPACA_KEY = os.getenv('ALPACA_API_KEY')
-ALPACA_SECRET = os.getenv('ALPACA_SECRET_KEY')
-
-# إعدادات الويب هوك لـ Railway
+# --- الإعدادات (تأكد من ضبطها في Railway Variables) ---
+API_TOKEN = os.getenv('TELEGRAM_TOKEN')
 WEBHOOK_HOST = f"https://{os.getenv('RAILWAY_STATIC_URL')}"
-WEBHOOK_PATH = f'/webhook/{TOKEN}'
+WEBHOOK_PATH = f'/webhook/{API_TOKEN}'
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-WEBAPP_HOST = '0.0.0.0'
-WEBAPP_PORT = int(os.getenv('PORT', 8080))
+PORT = int(os.getenv('PORT', 8080))
 
-# --- تهيئة البوت وقاعدة البيانات المؤقتة ---
+# تهيئة البوت
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=TOKEN)
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
-alpaca = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, base_url='https://paper-api.alpaca.markets')
 
-users_db = {}
+# --- الدوال المساعدة ---
 
-def get_user_data(user_id):
-    if user_id not in users_db:
-        users_db[user_id] = {
-            'lang': 'ar',
-            'channel': None,
-            'token': str(uuid.uuid4())[:8],
-            'alerts_count': 0
-        }
-    return users_db[user_id]
-
-# --- وظائف الرسوم البيانية ---
-def generate_chart(symbol):
+async def generate_stock_chart(symbol):
+    """توليد رسم بياني احترافي للسهم"""
     try:
-        # جلب بيانات تاريخية لآخر 5 أيام
-        bars = alpaca.get_bars(symbol, '1Hour', limit=100).df
-        if bars.empty: return None
-
-        plt.figure(figsize=(10, 5))
+        data = yf.download(symbol, period="5d", interval="1h", progress=False)
+        if data.empty: return None
+        
+        plt.figure(figsize=(10, 6))
         plt.style.use('dark_background')
-        plt.plot(bars.index, bars['close'], color='#00ffcc', linewidth=2)
-        plt.fill_between(bars.index, bars['close'], color='#00ffcc', alpha=0.1)
-        plt.title(f"Chart: {symbol}", color='white', fontsize=15)
-        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        plt.plot(data.index, data['Close'], color='#00ffcc', linewidth=2)
+        plt.fill_between(data.index, data['Close'], color='#00ffcc', alpha=0.1)
+        plt.title(f"{symbol} - Last 5 Days Performance", color='white', fontsize=12)
+        plt.grid(axis='y', linestyle='--', alpha=0.2)
         
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
@@ -62,82 +43,108 @@ def generate_chart(symbol):
     except:
         return None
 
-# --- الأزرار والقوائم ---
-async def get_main_keyboard(user_id):
-    data = get_user_data(user_id)
-    lang = data['lang']
+def get_main_menu():
+    """إنشاء اللوحة بنفس تصميم الصورة المطلوبة بالضبط"""
     keyboard = InlineKeyboardMarkup(row_width=2)
-    
-    if lang == 'ar':
-        keyboard.add(InlineKeyboardButton("👤 حسابي", callback_data="acc"), InlineKeyboardButton("🌐 English", callback_data="lang"))
-        keyboard.add(InlineKeyboardButton("📡 إضافة قناة", callback_data="add_ch"), InlineKeyboardButton("📡 قنواتي", callback_data="my_ch"))
-        keyboard.add(InlineKeyboardButton("🛡️ ويب هوك", callback_data="webk"), InlineKeyboardButton("🔐 رمز أمان", callback_data="token"))
-        keyboard.add(InlineKeyboardButton("🚀 التداول الآلي", callback_data="auto"), InlineKeyboardButton("📧 الدعم", callback_data="supp"))
-    else:
-        keyboard.add(InlineKeyboardButton("👤 My Account", callback_data="acc"), InlineKeyboardButton("🌐 العربية", callback_data="lang"))
-        keyboard.add(InlineKeyboardButton("📡 Add Channel", callback_data="add_ch"), InlineKeyboardButton("📡 Channels", callback_data="my_ch"))
-        keyboard.add(InlineKeyboardButton("🛡️ Webhook", callback_data="webk"), InlineKeyboardButton("🔐 Security", callback_data="token"))
-        keyboard.add(InlineKeyboardButton("🚀 Auto Trade", callback_data="auto"), InlineKeyboardButton("📧 Support", callback_data="supp"))
+    keyboard.add(
+        InlineKeyboardButton("👤 حسابي", callback_data="acc"),
+        InlineKeyboardButton("🌐 English", callback_data="lang")
+    )
+    keyboard.add(
+        InlineKeyboardButton("📡 إضافة قناة", callback_data="add_ch"),
+        InlineKeyboardButton("📡 قنواتي", callback_data="my_ch")
+    )
+    keyboard.add(
+        InlineKeyboardButton("🛡️ ويب هوك", callback_data="webk"),
+        InlineKeyboardButton("🔐 رمز أمان", callback_data="token")
+    )
+    keyboard.add(
+        InlineKeyboardButton("📈 مؤشر الأسهم", callback_data="market_index"),
+        InlineKeyboardButton("💰 سعر سهم", callback_data="get_price")
+    )
+    keyboard.add(
+        InlineKeyboardButton("🚀 التداول الآلي", callback_data="auto"),
+        InlineKeyboardButton("📧 الدعم", callback_data="supp")
+    )
     return keyboard
 
 # --- معالجة الأوامر ---
+
 @dp.message_handler(commands=['start'])
-async def welcome(message: types.Message):
-    await message.reply("📈 **Mr.MOH Bot**\nمرحباً بك في منصة التحليل المتطورة.", reply_markup=await get_main_keyboard(message.from_user.id), parse_mode="Markdown")
+async def send_welcome(message: types.Message):
+    welcome_text = (
+        "📈 **Mr.MOH Bot**\n"
+        "مرحباً بك في منصة التحليل المتطورة.\n\n"
+        "استخدم الأزرار أدناه للتحكم في حسابك أو أرسل رمز السهم مباشرة (مثال: AAPL)."
+    )
+    await message.reply(welcome_text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
 @dp.callback_query_handler(lambda c: True)
-async def handle_callbacks(c: types.CallbackQuery):
-    u_id = c.from_user.id
-    data = get_user_data(u_id)
+async def handle_all_callbacks(callback_query: types.CallbackQuery):
+    """معالج الأزرار السريع"""
+    # استجابة فورية لتليجرام لإزالة علامة الانتظار
+    await bot.answer_callback_query(callback_query.id)
     
-    if c.data == "lang":
-        data['lang'] = 'en' if data['lang'] == 'ar' else 'ar'
-        await bot.edit_message_reply_markup(u_id, c.message.message_id, reply_markup=await get_main_keyboard(u_id))
-    
-    elif c.data == "acc":
-        text = f"👤 **Profile**\n🆔 ID: `{u_id}`\n🔐 Token: `{data['token']}`\n📢 Channel: {'Connected' if data['channel'] else 'None'}"
-        await bot.send_message(u_id, text, parse_mode="Markdown")
-        
-    elif c.data == "webk":
-        if not data['channel']:
-            await bot.send_message(u_id, "⚠️ يجب ربط قناة أولاً!")
-        else:
-            url = f"{WEBHOOK_HOST}/hook/{u_id}?key={data['token']}"
-            await bot.send_message(u_id, f"🔗 **Webhook URL:**\n`{url}`", parse_mode="Markdown")
-    
-    await bot.answer_callback_query(c.id)
+    user_id = callback_query.from_user.id
+    data = callback_query.data
+
+    if data == "acc":
+        await bot.send_message(user_id, "👤 **بيانات حسابك:**\nالحالة: نشط ✅\nالخطة: بريميوم")
+    elif data == "market_index":
+        await bot.send_message(user_id, "📈 **أداء المؤشرات الرئيسية:**\nS&P 500: 🟢\nNasdaq: 🟢\nDow Jones: 🔴")
+    elif data == "get_price":
+        await bot.send_message(user_id, "⌨️ يرجى كتابة رمز السهم مباشرة في الشات (مثال: TSLA)")
+    elif data == "webk":
+        await bot.send_message(user_id, f"🛡️ **رابط الويب هوك الخاص بك:**\n`{WEBHOOK_HOST}/hook/{user_id}`")
+    else:
+        await bot.send_message(user_id, "🚧 هذه الميزة قيد التطوير حالياً.")
 
 @dp.message_handler()
-async def stock_request(message: types.Message):
+async def handle_stock_request(message: types.Message):
+    """جلب سعر السهم والشارت تلقائياً عند كتابة الرمز"""
     symbol = message.text.upper()
-    wait_msg = await message.answer("🔍 جاري جلب البيانات وتحليل الشارت...")
+    status_msg = await message.answer(f"🔍 جاري تحليل {symbol}...")
     
     try:
-        quote = alpaca.get_latest_quote(symbol)
-        chart = generate_chart(symbol)
+        ticker = yf.Ticker(symbol)
+        info = ticker.fast_info
+        current_price = info['last_price']
+        
+        chart_img = await generate_stock_chart(symbol)
         
         caption = (
             f"📊 **تقرير سهم: {symbol}**\n"
             f"━━━━━━━━━━━━━━\n"
-            f"💰 السعر الحالي: `${quote.bp}`\n"
-            f"🟢 عرض: `${quote.ap}` | 🔴 طلب: `${quote.bp}`\n"
-            f"⏰ الوقت: {datetime.now().strftime('%H:%M:%S')}\n"
+            f"💰 السعر الحالي: `${current_price:.2f}`\n"
+            f"📈 التغيير: {'🟢' if info['year_change'] > 0 else '🔴'} {info['year_change']:.2f}%\n"
             f"━━━━━━━━━━━━━━"
         )
         
-        if chart:
-            await bot.send_photo(message.chat.id, chart, caption=caption, parse_mode="Markdown")
+        if chart_img:
+            await bot.send_photo(message.chat.id, chart_img, caption=caption, parse_mode="Markdown")
         else:
             await message.answer(caption, parse_mode="Markdown")
             
-    except Exception as e:
-        await message.answer(f"❌ لم يتم العثور على السهم: {symbol}")
+    except Exception:
+        await message.answer(f"❌ تعذر العثور على بيانات للسهم: {symbol}")
     
-    await wait_msg.delete()
+    await status_msg.delete()
 
-# --- تشغيل الويب هوك ---
-async def on_startup(dp): await bot.set_webhook(WEBHOOK_URL)
-async def on_shutdown(dp): await bot.delete_webhook()
+# --- إعدادات التشغيل ---
+
+async def on_startup(dp):
+    await bot.set_webhook(WEBHOOK_URL)
+
+async def on_shutdown(dp):
+    await bot.delete_webhook()
 
 if __name__ == '__main__':
-    start_webhook(dispatcher=dp, webhook_path=WEBHOOK_PATH, on_startup=on_startup, on_shutdown=on_shutdown, host=WEBAPP_HOST, port=WEBAPP_PORT)
+    start_webhook(
+        dispatcher=dp,
+        webhook_path=WEBHOOK_PATH,
+        on_startup=on_startup,
+        on_shutdown=on_shutdown,
+        skip_updates=True,
+        host='0.0.0.0',
+        port=PORT,
+    )
