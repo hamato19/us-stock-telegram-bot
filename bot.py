@@ -1,32 +1,37 @@
-from fastapi import FastAPI, Request
+import os
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
 import alpaca_trade_api as tradeapi
-import asyncio
-from aiogram import Bot
 
-app = FastAPI()
+# سحب المفاتيح من نظام الأمان (Secrets)
+API_TOKEN = os.getenv('TELEGRAM_TOKEN')
+ALPACA_KEY = os.getenv('ALPACA_API_KEY')
+ALPACA_SECRET = os.getenv('ALPACA_SECRET_KEY')
+BASE_URL = 'https://paper-api.alpaca.markets'
 
-# إعداداتك (يفضل وضعها في Secrets)
-ALPACA_KEY = 'YOUR_KEY'
-ALPACA_SECRET = 'YOUR_SECRET'
-TELEGRAM_TOKEN = 'YOUR_TOKEN'
-CHAT_ID = 'YOUR_CHAT_ID'
+# إعداد Alpaca
+alpaca = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, BASE_URL, api_version='v2')
 
-bot = Bot(token=TELEGRAM_TOKEN)
-api = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, 'https://paper-api.alpaca.markets')
+logging.basicConfig(level=logging.INFO)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
 
-# هذا هو رابط الـ Webhook الذي ستضعه في TradingView
-@app.post("/webhook")
-async def handle_webhook(request: Request):
-    data = await request.json()
-    
-    # مثال: إذا وصلت إشارة شراء من TradingView
-    symbol = data.get('ticker')
-    action = data.get('action') # buy or sell
-    
-    if action == 'buy':
-        # تنفيذ أمر شراء في Alpaca
-        api.submit_order(symbol=symbol, qty=1, side='buy', type='market', time_in_force='gtc')
-        # إرسال تنبيه لك على التليجرام
-        await bot.send_message(CHAT_ID, f"🚀 تم تنفيذ أمر شراء لسهم {symbol} آلياً!")
-    
-    return {"status": "success"}
+@dp.message_handler(commands=['start'])
+async def send_welcome(message: types.Message):
+    await message.reply("💹 **تم تفعيل نبض الأسهم الأمريكية!**\n\nأرسل رمز السهم (مثل AAPL) لجلب السعر المباشر من محفظتك الورقية.")
+
+@dp.message_handler()
+async def get_stock(message: types.Message):
+    symbol = message.text.upper()
+    try:
+        # جلب آخر سعر من Alpaca
+        trade = alpaca.get_latest_trade(symbol)
+        price = trade.price
+        
+        await message.reply(f"📊 **سهم {symbol}**\n💰 السعر الحالي: `${price}`\n✅ المصدر: Alpaca Markets")
+    except Exception as e:
+        await message.reply(f"⚠️ خطأ: تأكد من رمز السهم أو إعدادات الـ API.")
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
