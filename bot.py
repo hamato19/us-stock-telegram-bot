@@ -1,17 +1,15 @@
 import os
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
 import alpaca_trade_api as tradeapi
+from aiogram import Bot, Dispatcher, executor, types
 
-# سحب المفاتيح من نظام الأمان (Secrets)
-API_TOKEN = os.getenv('8716978578:AAH2q8xvGhqPojFubFzowjwbj18p5MIYm6E')
-ALPACA_KEY = os.getenv('PK3M474JEZAHBM27KEDOGYVJTJ')
-ALPACA_SECRET = os.getenv('7jcgS2bQVBD8XxWRpwr1Lmq5UGsvsxEC9WDhh7yhmBJR')
-BASE_URL = 'https://paper-api.alpaca.markets'
+# استدعاء المتغيرات من إعدادات Render
+API_TOKEN = os.getenv('TELEGRAM_TOKEN')
+ALPACA_KEY = os.getenv('ALPACA_API_KEY')
+ALPACA_SECRET = os.getenv('ALPACA_SECRET_KEY')
+BASE_URL = 'https://paper-api.alpaca.markets' # رابط التداول الورقي
 
-# إعداد Alpaca
-alpaca = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, BASE_URL, api_version='v2')
+# الربط مع Alpaca
+api = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, BASE_URL, api_version='v2')
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
