@@ -1,36 +1,32 @@
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+from fastapi import FastAPI, Request
+import alpaca_trade_api as tradeapi
+import asyncio
+from aiogram import Bot
 
-# --- الإعدادات ---
-API_TOKEN = 'ضع_هنا_توكن_البوت_الخاص_بك'
-ADMIN_ID = 12345678  # ضع هنا الأيدي الخاص بك
+app = FastAPI()
 
-# إعداد السجلات
-logging.basicConfig(level=logging.INFO)
+# إعداداتك (يفضل وضعها في Secrets)
+ALPACA_KEY = 'YOUR_KEY'
+ALPACA_SECRET = 'YOUR_SECRET'
+TELEGRAM_TOKEN = 'YOUR_TOKEN'
+CHAT_ID = 'YOUR_CHAT_ID'
 
-# تشغيل البوت
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+bot = Bot(token=TELEGRAM_TOKEN)
+api = tradeapi.REST(ALPACA_KEY, ALPACA_SECRET, 'https://paper-api.alpaca.markets')
 
-# 1. رسالة الترحيب (Start)
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    welcome_text = (
-        "💹 **نبض الأسهم الأمريكية**\n\n"
-        "المساعد الذكي للتداول في السوق الأمريكي 🇺🇸\n"
-        "🔍 **تحليل شرعي** | 📈 **فني** | 📊 **مالي**\n\n"
-        "✍️ اكتب رمز السهم مثال `AAPL` او الصندوق مثال `SMH` ويظهر لك التقرير فورًا!"
-    )
-    await message.reply(welcome_text, parse_mode='Markdown')
-
-# 2. استقبال رموز الأسهم (مثل AAPL)
-@dp.message_handler()
-async def stock_request(message: types.Message):
-    stock_symbol = message.text.upper()
+# هذا هو رابط الـ Webhook الذي ستضعه في TradingView
+@app.post("/webhook")
+async def handle_webhook(request: Request):
+    data = await request.json()
     
-    # هنا لاحقاً سنضيف كود الربط مع Alpaca لجلب السعر الحقيقي
-    await message.reply(f"🔍 جاري استخراج تقرير لـ: {stock_symbol}...\n⏳ هذه الميزة قيد التطوير للربط مع API.")
-
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    # مثال: إذا وصلت إشارة شراء من TradingView
+    symbol = data.get('ticker')
+    action = data.get('action') # buy or sell
+    
+    if action == 'buy':
+        # تنفيذ أمر شراء في Alpaca
+        api.submit_order(symbol=symbol, qty=1, side='buy', type='market', time_in_force='gtc')
+        # إرسال تنبيه لك على التليجرام
+        await bot.send_message(CHAT_ID, f"🚀 تم تنفيذ أمر شراء لسهم {symbol} آلياً!")
+    
+    return {"status": "success"}
