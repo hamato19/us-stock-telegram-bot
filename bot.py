@@ -5,9 +5,9 @@ from aiogram.utils import executor
 import alpaca_trade_api as tradeapi
 
 # سحب المفاتيح من نظام الأمان (Secrets)
-API_TOKEN = os.getenv('TELEGRAM_TOKEN')
-ALPACA_KEY = os.getenv('ALPACA_API_KEY')
-ALPACA_SECRET = os.getenv('ALPACA_SECRET_KEY')
+API_TOKEN = os.getenv('8716978578:AAH2q8xvGhqPojFubFzowjwbj18p5MIYm6E')
+ALPACA_KEY = os.getenv('PK3M474JEZAHBM27KEDOGYVJTJ')
+ALPACA_SECRET = os.getenv('7jcgS2bQVBD8XxWRpwr1Lmq5UGsvsxEC9WDhh7yhmBJR')
 BASE_URL = 'https://paper-api.alpaca.markets'
 
 # إعداد Alpaca
@@ -19,7 +19,7 @@ dp = Dispatcher(bot)
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    await message.reply("💹 **تم تفعيل نبض الأسهم الأمريكية!**\n\nأرسل رمز السهم (مثل AAPL) لجلب السعر المباشر من محفظتك الورقية.")
+    await message.reply("💹 **تم تفعيل Mr.MOH الأسهم الأمريكية!**\n\nأرسل رمز السهم (مثل AAPL) لجلب السعر المباشر من محفظتك الورقية.")
 
 @dp.message_handler()
 async def get_stock(message: types.Message):
