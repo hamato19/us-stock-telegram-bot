@@ -1,2 +1,4 @@
+setuptools
+wheel
 aiogram==2.25.1
 alpaca-trade-api
